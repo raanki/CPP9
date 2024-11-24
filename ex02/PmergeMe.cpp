@@ -1,7 +1,38 @@
 #include "PmergeMe.hpp"
 #include <iostream>
+#include <vector>
+#include <deque>
 #include <algorithm>
+#include <iterator>
 
+// la suite de Jacobsthal jusqu'à n
+std::vector<int> generateJacobsthalSequence(int n) {
+    std::vector<int> jacobsthal;
+    jacobsthal.push_back(0); // J_0 = 0
+    jacobsthal.push_back(1); // J_1 = 1
+    int index = 1;
+    while (true) {
+        int next = jacobsthal[index] + 2 * jacobsthal[index - 1];
+        if (next >= n)
+            break;
+        jacobsthal.push_back(next);
+        index++;
+    }
+    return jacobsthal;
+}
+
+// binarySearch
+template <typename Iterator, typename T>
+Iterator binarySearchInsertPosition(Iterator begin, Iterator end, const T& value) {
+    while (begin < end) {
+        Iterator mid = begin + (end - begin) / 2;
+        if (value < *mid)
+            end = mid;
+        else
+            begin = mid + 1;
+    }
+    return begin;
+}
 
 PmergeMe::PmergeMe(const std::vector<int>& data)
     : vectorData(data), dequeData(data.begin(), data.end()) {}
@@ -20,11 +51,11 @@ PmergeMe& PmergeMe::operator=(const PmergeMe& other) {
 PmergeMe::~PmergeMe() {}
 
 void PmergeMe::sortWithVector() {
-    fordJohnsonSortVector();
+    vectorData = mergeInsertionSort(vectorData);
 }
 
 void PmergeMe::sortWithDeque() {
-    fordJohnsonSortDeque();
+    dequeData = mergeInsertionSort(dequeData);
 }
 
 const std::vector<int>& PmergeMe::getSortedVector() const {
@@ -35,72 +66,191 @@ const std::deque<int>& PmergeMe::getSortedDeque() const {
     return dequeData;
 }
 
-// Ford-Johnson sort pour std::vector
-void PmergeMe::fordJohnsonSortVector() {
-    int n = vectorData.size();
-    if (n <= 1) return;
+// ford-johson sort
+std::vector<int> PmergeMe::mergeInsertionSort(const std::vector<int>& data) {
+    int n = data.size();
+    if (n <= 1)
+        return data;
 
-    std::vector<int> sortedData;
-
-    // Étape 1 : Trier les paires et insérer dans la liste triée
+    // Étape 1 : Groupement en paires
+    std::vector<std::pair<int, int> > pairs;
+    std::vector<int> unpairedElements;
     for (int i = 0; i + 1 < n; i += 2) {
-        if (vectorData[i] > vectorData[i + 1]) {
-            std::swap(vectorData[i], vectorData[i + 1]);
-        }
-        // Insérer le plus petit élément de la paire
-        sortedData.insert(
-            std::upper_bound(sortedData.begin(), sortedData.end(), vectorData[i]), 
-            vectorData[i]
-        );
-        // Insérer le plus grand élément de la paire
-        sortedData.insert(
-            std::upper_bound(sortedData.begin(), sortedData.end(), vectorData[i + 1]), 
-            vectorData[i + 1]
-        );
+        pairs.push_back(std::make_pair(data[i], data[i + 1]));
     }
-
-    // Si le nombre d'éléments est impair, on insère le dernier élément
     if (n % 2 != 0) {
-        sortedData.insert(
-            std::upper_bound(sortedData.begin(), sortedData.end(), vectorData.back()), 
-            vectorData.back()
-        );
+        unpairedElements.push_back(data.back());
     }
 
-    vectorData = sortedData;
+    // Étape 2 : Comparaison des paires
+    std::vector<int> largerElements;
+    std::vector<int> smallerElements;
+    for (std::size_t i = 0; i < pairs.size(); ++i) {
+        if (pairs[i].first > pairs[i].second) {
+            largerElements.push_back(pairs[i].first);
+            smallerElements.push_back(pairs[i].second);
+        } else {
+            largerElements.push_back(pairs[i].second);
+            smallerElements.push_back(pairs[i].first);
+        }
+    }
+
+    // Étape 3 : Tri récursif des plus grands éléments
+    std::vector<int> S = mergeInsertionSort(largerElements);
+
+    // Étape 4 : Insertion de l'élément apparié avec le premier élément de S
+    std::vector<int> result;
+    int indexOfFirstInS = -1;
+    if (!smallerElements.empty()) {
+        // Trouver l'indice de l'élément apparié avec le premier élément de S
+        for (std::size_t i = 0; i < largerElements.size(); ++i) {
+            if (largerElements[i] == S[0]) {
+                indexOfFirstInS = static_cast<int>(i);
+                break;
+            }
+        }
+        if (indexOfFirstInS != -1) {
+            // Insérer l'élément apparié au début de S
+            result.push_back(smallerElements[indexOfFirstInS]);
+        }
+    }
+
+    // Ajouter le reste de S
+    result.insert(result.end(), S.begin(), S.end());
+
+    // Étape 5 : Insertion des éléments restants selon la suite de Jacobsthal
+    std::vector<int> pendingIndices;
+    for (std::size_t i = 0; i < smallerElements.size(); ++i) {
+        if (static_cast<int>(i) != indexOfFirstInS)
+            pendingIndices.push_back(static_cast<int>(i));
+    }
+
+    // Générer la suite de Jacobsthal
+    std::vector<int> jacobsthalSeq = generateJacobsthalSequence(pendingIndices.size());
+    // 0 1 1 3 5 11 21 43 85 171 341 683 1365 2731 5461
+
+    // Insertion des éléments selon la suite de Jacobsthal
+    std::vector<bool> inserted(pendingIndices.size(), false);
+    for (std::size_t seqIndex = 1; seqIndex < jacobsthalSeq.size(); ++seqIndex) {
+        int idx = jacobsthalSeq[seqIndex] - 1;
+        if (idx < 0 || idx >= static_cast<int>(pendingIndices.size()))
+            continue;
+        if (inserted[idx])
+            continue;
+        int valueToInsert = smallerElements[pendingIndices[idx]];
+        std::vector<int>::iterator insertPos = binarySearchInsertPosition(result.begin(), result.end(), valueToInsert);
+        result.insert(insertPos, valueToInsert);
+        inserted[idx] = true;
+    }
+    // Insérer les éléments restants
+    for (std::size_t i = 0; i < pendingIndices.size(); ++i) {
+        if (!inserted[i]) {
+            int valueToInsert = smallerElements[pendingIndices[i]];
+            std::vector<int>::iterator insertPos = binarySearchInsertPosition(result.begin(), result.end(), valueToInsert);
+            result.insert(insertPos, valueToInsert);
+        }
+    }
+
+    // Insertion des éléments non appariés
+    for (std::size_t i = 0; i < unpairedElements.size(); ++i) {
+        int valueToInsert = unpairedElements[i];
+        std::vector<int>::iterator insertPos = binarySearchInsertPosition(result.begin(), result.end(), valueToInsert);
+        result.insert(insertPos, valueToInsert);
+    }
+
+    return result;
 }
 
-// Ford-Johnson sort pour std::deque
-void PmergeMe::fordJohnsonSortDeque() {
-    int n = dequeData.size();
-    if (n <= 1) return;
+// Implémentation de Merge-Insertion Sort pour std::deque
+std::deque<int> PmergeMe::mergeInsertionSort(const std::deque<int>& data) {
+    int n = data.size();
+    if (n <= 1)
+        return data;
 
-    std::deque<int> sortedData;
-
-    // Étape 1 : Trier les paires et insérer dans la liste triée
+    // Étape 1 : Groupement en paires
+    std::vector<std::pair<int, int> > pairs;
+    std::deque<int> unpairedElements;
     for (int i = 0; i + 1 < n; i += 2) {
-        if (dequeData[i] > dequeData[i + 1]) {
-            std::swap(dequeData[i], dequeData[i + 1]);
-        }
-        // Insérer le plus petit élément de la paire
-        sortedData.insert(
-            std::upper_bound(sortedData.begin(), sortedData.end(), dequeData[i]), 
-            dequeData[i]
-        );
-        // Insérer le plus grand élément de la paire
-        sortedData.insert(
-            std::upper_bound(sortedData.begin(), sortedData.end(), dequeData[i + 1]), 
-            dequeData[i + 1]
-        );
+        pairs.push_back(std::make_pair(data[i], data[i + 1]));
     }
-
-    // Si le nombre d'éléments est impair, on insère le dernier élément
     if (n % 2 != 0) {
-        sortedData.insert(
-            std::upper_bound(sortedData.begin(), sortedData.end(), dequeData.back()), 
-            dequeData.back()
-        );
+        unpairedElements.push_back(data.back());
     }
 
-    dequeData = sortedData;
+    // Étape 2 : Comparaison des paires
+    std::deque<int> largerElements;
+    std::deque<int> smallerElements;
+    for (std::size_t i = 0; i < pairs.size(); ++i) {
+        if (pairs[i].first > pairs[i].second) {
+            largerElements.push_back(pairs[i].first);
+            smallerElements.push_back(pairs[i].second);
+        } else {
+            largerElements.push_back(pairs[i].second);
+            smallerElements.push_back(pairs[i].first);
+        }
+    }
+
+    // Étape 3 : Tri récursif des plus grands éléments
+    std::deque<int> S = mergeInsertionSort(largerElements);
+
+    // Étape 4 : Insertion de l'élément apparié avec le premier élément de S
+    std::deque<int> result;
+    int indexOfFirstInS = -1;
+    if (!smallerElements.empty()) {
+        // Trouver l'indice de l'élément apparié avec le premier élément de S
+        for (std::size_t i = 0; i < largerElements.size(); ++i) {
+            if (largerElements[i] == S[0]) {
+                indexOfFirstInS = static_cast<int>(i);
+                break;
+            }
+        }
+        if (indexOfFirstInS != -1) {
+            // Insérer l'élément apparié au début de S
+            result.push_back(smallerElements[indexOfFirstInS]);
+        }
+    }
+
+    // Ajouter le reste de S
+    result.insert(result.end(), S.begin(), S.end());
+
+    // Étape 5 : Insertion des éléments restants selon la suite de Jacobsthal
+    std::vector<int> pendingIndices;
+    for (std::size_t i = 0; i < smallerElements.size(); ++i) {
+        if (static_cast<int>(i) != indexOfFirstInS)
+            pendingIndices.push_back(static_cast<int>(i));
+    }
+
+    // Générer la suite de Jacobsthal
+    std::vector<int> jacobsthalSeq = generateJacobsthalSequence(pendingIndices.size());
+
+    // Insertion des éléments selon la suite de Jacobsthal
+    std::vector<bool> inserted(pendingIndices.size(), false);
+    for (std::size_t seqIndex = 1; seqIndex < jacobsthalSeq.size(); ++seqIndex) {
+        int idx = jacobsthalSeq[seqIndex] - 1;
+        if (idx < 0 || idx >= static_cast<int>(pendingIndices.size()))
+            continue;
+        if (inserted[idx])
+            continue;
+        int valueToInsert = smallerElements[pendingIndices[idx]];
+        std::deque<int>::iterator insertPos = binarySearchInsertPosition(result.begin(), result.end(), valueToInsert);
+        result.insert(insertPos, valueToInsert);
+        inserted[idx] = true;
+    }
+    // Insérer les éléments restants
+    for (std::size_t i = 0; i < pendingIndices.size(); ++i) {
+        if (!inserted[i]) {
+            int valueToInsert = smallerElements[pendingIndices[i]];
+            std::deque<int>::iterator insertPos = binarySearchInsertPosition(result.begin(), result.end(), valueToInsert);
+            result.insert(insertPos, valueToInsert);
+        }
+    }
+
+    // Insertion des éléments non appariés
+    for (std::size_t i = 0; i < unpairedElements.size(); ++i) {
+        int valueToInsert = unpairedElements[i];
+        std::deque<int>::iterator insertPos = binarySearchInsertPosition(result.begin(), result.end(), valueToInsert);
+        result.insert(insertPos, valueToInsert);
+    }
+
+    return result;
 }

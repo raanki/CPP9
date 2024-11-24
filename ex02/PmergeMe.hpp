@@ -6,7 +6,7 @@
 /*   By: ranki <ranki@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/08/28 08:50:19 by ranki             #+#    #+#             */
-/*   Updated: 2024/08/28 11:20:39 by ranki            ###   ########.fr       */
+/*   Updated: 2024/11/24 15:23:52 by ranki            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -37,11 +37,9 @@ private:
     void fordJohnsonSortVector();
     void fordJohnsonSortDeque();
 
-    void mergePairsVector(int left, int right);
-    void mergePairsDeque(int left, int right);
+    std::deque<int> mergeInsertionSort(const std::deque<int>& data);
+    std::vector<int> mergeInsertionSort(const std::vector<int>& data);
 
-    void insertAndMergeVector(int left, int mid, int right);
-    void insertAndMergeDeque(int left, int mid, int right);
 };
 
 #endif
